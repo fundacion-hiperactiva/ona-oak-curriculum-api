@@ -4,12 +4,14 @@ import {
   LessonRestrictionLevel,
   type LessonRestrictionView,
   lessonRestrictionView,
-  lessonView,
-  type LessonView,
 } from './owaClient';
 import { subjectSlugs } from './keyStageAndSubjects';
 import { childSubjects } from './oakConsts';
-import type { DownloadTypeEnum } from '@/lib/handlers/assets/types';
+import {
+  type GatedAssetType,
+  getAssetRestrictionsForLesson,
+  getAssetRestrictionsForLessons,
+} from './queryGateData/assetTypeRestrictions';
 
 const commonError =
   'Learn more about Oak errors: https://open-api.thenational.academy/docs/about-oaks-api/errors';
@@ -86,87 +88,19 @@ export function isSubjectAllowed(subject: string): boolean {
 }
 
 /**
- * The asset types the gate can be asked about: anything downloadable, plus the
- * transcript and the quiz, which are served by endpoints of their own.
+ * The restriction status of each of the given lessons, from the lesson's own
+ * restriction levels and the layer over them. The single source of truth for
+ * the gate's bulk answer: the asset endpoints read it as a boolean through
+ * `getLessonsRestrictions`, and the check-restricted endpoints return it.
+ *
+ * Lessons with no published row in the restriction view are left out, unless
+ * the layer restricts them.
  */
-export type GatedAssetType = DownloadTypeEnum | 'transcript' | 'quiz';
-
-/**
- * Subjects where third-party content is restricted across a whole asset type,
- * irrespective of an individual lesson's restriction levels.
- */
-const restrictedSubjectsMap = new Map<string, GatedAssetType[]>([
-  ['art', ['video', 'transcript']],
-  ['music', ['slideDeck']],
-  ['religious-education', ['video', 'transcript']],
-]);
-
-const subjectRestrictedAssetTypes = new Set<GatedAssetType>(
-  [...restrictedSubjectsMap.values()].flat(),
-);
-
-/**
- * Whether any subject restricts this asset type, so we only go looking for a
- * lesson's subject when the answer could matter.
- */
-function canBeSubjectRestricted(assetType?: GatedAssetType): boolean {
-  return !assetType || subjectRestrictedAssetTypes.has(assetType);
-}
-
-/**
- * Without an asset type, every asset type is in scope, so any subject-level
- * restriction at all applies.
- */
-function isRestrictedBySubject(
-  subjectSlug: string | undefined,
-  assetType?: GatedAssetType,
-): boolean {
-  const restrictedAssetTypes = subjectSlug
-    ? restrictedSubjectsMap.get(subjectSlug)
-    : undefined;
-
-  if (!restrictedAssetTypes) {
-    return false;
-  }
-
-  return !assetType || restrictedAssetTypes.includes(assetType);
-}
-
-/** The subject slug of each of the given lessons that has one. */
-async function getLessonSubjectSlugs(
-  client: GraphQLClient,
-  lessonSlugs: string[],
-): Promise<Map<string, string>> {
-  const query = gql`
-  query ($slugs: [String!]!) @cached(ttl: 300) {
-    ${lessonView}(
-      where: { lessonSlug: { _in: $slugs }, isLegacy: { _eq: false } }
-      distinct_on: lessonSlug
-    ) {
-      lessonSlug
-      subjectSlug
-    }
-  }
-  `;
-
-  const res: LessonView = await client.request(query, { slugs: lessonSlugs });
-
-  const subjectSlugsByLesson = new Map<string, string>();
-
-  for (const lesson of res[lessonView] ?? []) {
-    if (lesson.lessonSlug && lesson.subjectSlug) {
-      subjectSlugsByLesson.set(lesson.lessonSlug, lesson.subjectSlug);
-    }
-  }
-
-  return subjectSlugsByLesson;
-}
-
-export async function getLessonsRestrictions(
+export async function getLessonsRestrictionStatuses(
   client: GraphQLClient,
   lessonSlugs: string[],
   assetType?: GatedAssetType,
-): Promise<Record<string, boolean>> {
+): Promise<Record<string, CollapsedRestrictionStatus>> {
   const query = gql`
   query ($slugs: [String!]!) @cached(ttl: 300) {
     ${lessonRestrictionView}(
@@ -181,34 +115,58 @@ export async function getLessonsRestrictions(
   }
   `;
 
-  // the two views are independent, so don't pay for them one after the other
-  const restrictions: Promise<LessonRestrictionView> = client.request(query, {
+  const restrictions: LessonRestrictionView = await client.request(query, {
     slugs: lessonSlugs,
   });
 
-  const [res, subjectSlugsByLesson] = await Promise.all([
-    restrictions,
-    canBeSubjectRestricted(assetType)
-      ? getLessonSubjectSlugs(client, lessonSlugs)
-      : new Map<string, string>(),
-  ]);
+  // TEMP-TPC-GATE: `assetType || 'video'` — see queryGateData/assetTypeRestrictions.ts
+  const layerRestrictions = await getAssetRestrictionsForLessons(
+    client,
+    lessonSlugs,
+    assetType || 'video',
+  );
 
-  const result: Record<string, boolean> = {};
+  const result: Record<string, CollapsedRestrictionStatus> = {};
 
-  for (const lesson of res[lessonRestrictionView]) {
-    result[lesson.slug] =
-      isRestrictedBySubject(subjectSlugsByLesson.get(lesson.slug), assetType) ||
-      isRestricted(
-        highestRestrictionLevel([
-          lesson.tpc_downloadablefiles_max_restriction,
-          lesson.tpc_media_max_restriction,
-          lesson.tpc_quizimages_max_restriction,
-          lesson.tpc_works_max_restriction,
-        ]),
-      );
+  for (const lesson of restrictions[lessonRestrictionView]) {
+    result[lesson.slug] = collapsedRestrictionStatus(
+      highestRestrictionLevel([
+        lesson.tpc_downloadablefiles_max_restriction,
+        lesson.tpc_media_max_restriction,
+        lesson.tpc_quizimages_max_restriction,
+        lesson.tpc_works_max_restriction,
+      ]),
+    );
+  }
+
+  // the layer only ever restricts further, and it stands on its own: a lesson
+  // it restricts stays restricted even with no row in the restriction view
+  for (const [slug, status] of layerRestrictions) {
+    if (status === 'restricted') {
+      result[slug] = status;
+    }
   }
 
   return result;
+}
+
+export async function getLessonsRestrictions(
+  client: GraphQLClient,
+  lessonSlugs: string[],
+  assetType?: GatedAssetType,
+): Promise<Record<string, boolean>> {
+  const statuses = await getLessonsRestrictionStatuses(
+    client,
+    lessonSlugs,
+    assetType,
+  );
+
+  return Object.fromEntries(
+    Object.entries(statuses).map(([slug, status]) => [
+      slug,
+      status === 'restricted',
+    ]),
+  );
 }
 
 export async function isLessonRestricted(
@@ -237,20 +195,15 @@ export async function isLessonRestricted(
     return new GateWithReason(false, 'Lesson not in restrictions');
   }
 
-  if (canBeSubjectRestricted(assetType)) {
-    const subjectSlugsByLesson = await getLessonSubjectSlugs(client, [
+  if (
+    (await getAssetRestrictionsForLesson(
+      client,
       lessonSlug,
-    ]);
-
-    if (
-      isRestrictedBySubject(subjectSlugsByLesson.get(lessonSlug), assetType)
-    ) {
-      return new GateWithReason(
-        true,
-        'Lesson contains restricted content at the subject level, and therefore blocked. ' +
-          commonError,
-      );
-    }
+      assetType || 'video',
+    )) === 'restricted'
+  ) {
+    // This error is apparently intentionally vague. See git blame for info
+    return new GateWithReason(true, 'This is not currently available.');
   }
 
   const restriction = res[lessonRestrictionView][0];

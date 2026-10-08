@@ -66,8 +66,10 @@ describe('/search/transcripts', () => {
       const subjectSlugs: Record<string, string> = {
         // art restricts transcripts for the whole subject
         'slug-3': 'art',
-        // music restricts slide decks, which says nothing about transcripts
-        'slug-5': 'music',
+        // TEMP-TPC-GATE: was music, which restricted slide decks and so said
+        // nothing about transcripts. Geography is the subject that still
+        // leaves transcripts out.
+        'slug-5': 'geography',
       };
 
       return {
@@ -89,7 +91,7 @@ describe('/search/transcripts', () => {
 
     // slug-2 (media) and slug-3 (art transcripts) are gone, the five best of
     // what remains fill the results in rank order, and slug-5 survives because
-    // music restricts slide decks rather than transcripts
+    // geography restricts slide decks rather than transcripts
     expect(result.map((lesson) => lesson.lessonSlug)).toStrictEqual([
       'slug-1',
       'slug-4',

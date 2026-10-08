@@ -2,22 +2,14 @@ import groupBy from 'object.groupby';
 import { v0Procedure } from '@/lib/protect';
 import { router } from '@/lib/trpc';
 import { TRPCError } from '@trpc/server';
-import {
-  getClient,
-  gql,
-  LessonRestrictionView,
-  lessonRestrictionView,
-  lessonSearchView,
-  lessonView,
-} from 'lib/owaClient';
+import { getClient, gql, lessonSearchView, lessonView } from 'lib/owaClient';
 import type { LessonSearchView, LessonView } from 'lib/owaClient';
 import * as z from 'zod/v4';
 import { errorResponses } from '@/lib/errorResponses';
 
 import {
-  collapsedRestrictionStatus,
   collapsedRestrictionStatuses,
-  highestRestrictionLevel,
+  getLessonsRestrictionStatuses,
   isLessonRestricted,
   isSubjectAllowed,
 } from '@/lib/queryGate';
@@ -43,7 +35,6 @@ import {
 groupBy.shim();
 
 const restrictionEnum = z.enum(collapsedRestrictionStatuses);
-export type RestrictionOutput = z.infer<typeof restrictionEnum>;
 export const checkRestrictedLessonsResponseSchema = z
   .record(z.string(), restrictionEnum)
   .meta({
@@ -76,43 +67,10 @@ Not for: checking a single lesson (GET /lessons/{lesson}/summary); searching les
     .output(checkRestrictedLessonsResponseSchema)
     .query(async ({ input }) => {
       const { lessonSlugs } = input;
-      const client = getClient();
 
-      const query = gql`
-        query ($slugs: [String!]!) @cached(ttl: 300) {
-          ${lessonRestrictionView}(
-            where: { slug: { _in: $slugs }, _state: { _eq: "published" } }
-          ) {
-            slug
-            tpc_downloadablefiles_max_restriction
-            tpc_media_max_restriction
-            tpc_quizimages_max_restriction
-            tpc_works_max_restriction
-          }
-        }
-      `;
-
-      const res: LessonRestrictionView = await client.request(query, {
-        slugs: lessonSlugs,
-      });
-
-      const results = res[lessonRestrictionView].reduce(
-        (acc, curr) => {
-          acc[curr.slug] = collapsedRestrictionStatus(
-            highestRestrictionLevel([
-              curr.tpc_downloadablefiles_max_restriction,
-              curr.tpc_media_max_restriction,
-              curr.tpc_quizimages_max_restriction,
-              curr.tpc_works_max_restriction,
-            ]),
-          );
-
-          return acc;
-        },
-        {} as Record<string, RestrictionOutput>,
-      );
-
-      return results;
+      // no asset type: this answers for the lesson as a whole rather than for
+      // one of its assets, so it takes the gate's default reading
+      return getLessonsRestrictionStatuses(getClient(), lessonSlugs);
     }),
   getLesson: v0Procedure
     .meta({
@@ -245,7 +203,7 @@ Example slug: imagining-you-are-the-characters-the-three-billy-goats-gruff.`,
         } as z.infer<typeof lessonSummaryResponseSchema>;
 
         if (lesson.downloadsAvailable) {
-          const gated = await isLessonRestricted(client, slug);
+          const gated = await isLessonRestricted(client, slug, 'slideDeck');
           if (gated.isBlocked()) {
             lesson.downloadsAvailable = false;
           }

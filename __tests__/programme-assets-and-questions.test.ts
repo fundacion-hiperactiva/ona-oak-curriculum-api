@@ -87,6 +87,10 @@ describe('programme assets and questions endpoints', () => {
     mocks.owaClientRequestMock.mockResolvedValueOnce({
       [lessonRestrictionView]: [],
     });
+    // the gate's subject lookup, then the questions themselves
+    mocks.owaClientRequestMock.mockResolvedValueOnce({
+      [lessonView]: [],
+    });
     mocks.owaClientRequestMock.mockResolvedValueOnce({
       [lessonView]: [],
     });
@@ -102,7 +106,10 @@ describe('programme assets and questions endpoints', () => {
       }),
     ).resolves.toStrictEqual([]);
 
-    expect(mocks.owaClientRequestMock).toHaveBeenCalledTimes(3);
+    // TEMP-TPC-GATE: was three calls. The gate used to skip the subject
+    // lookup for asset types no subject restricted, 'quiz' among them; it now
+    // looks the subject up every time, which is the third call here.
+    expect(mocks.owaClientRequestMock).toHaveBeenCalledTimes(4);
     expect(mocks.owaClientRequestMock.mock.calls[1]?.[0]).toContain(
       `${lessonRestrictionView}(`,
     );
@@ -113,6 +120,12 @@ describe('programme assets and questions endpoints', () => {
       `${lessonView}(`,
     );
     expect(mocks.owaClientRequestMock.mock.calls[2]?.[1]).toEqual({
+      slugs: ['variables-and-data-types'],
+    });
+    expect(mocks.owaClientRequestMock.mock.calls[3]?.[0]).toContain(
+      `${lessonView}(`,
+    );
+    expect(mocks.owaClientRequestMock.mock.calls[3]?.[1]).toEqual({
       lessonSlugs: ['variables-and-data-types'],
       offset: 0,
       limit: 10,
