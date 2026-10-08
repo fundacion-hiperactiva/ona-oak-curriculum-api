@@ -142,6 +142,13 @@ describe('programme assets and questions endpoints', () => {
         },
       ],
     });
+    // the gate also checks for subject-level restrictions
+    mocks.owaClientRequestMock.mockResolvedValueOnce({
+      [lessonView]: [
+        { lessonSlug: 'variables-and-data-types', subjectSlug: 'computing' },
+        { lessonSlug: 'restricted-lesson', subjectSlug: 'computing' },
+      ],
+    });
     mocks.owaClientRequestMock.mockResolvedValueOnce({
       [downloadView]: [
         {
@@ -192,8 +199,8 @@ describe('programme assets and questions endpoints', () => {
       '/api/v0/lessons/variables-and-data-types/assets/slideDeck',
     );
 
-    expect(mocks.owaClientRequestMock).toHaveBeenCalledTimes(4);
-    expect(mocks.owaClientRequestMock.mock.calls[2]?.[1]).toEqual({
+    expect(mocks.owaClientRequestMock).toHaveBeenCalledTimes(5);
+    expect(mocks.owaClientRequestMock.mock.calls[3]?.[1]).toEqual({
       lessonSlugs: ['variables-and-data-types'],
     });
   });
@@ -214,6 +221,11 @@ describe('programme assets and questions endpoints', () => {
       });
       mocks.owaClientRequestMock.mockResolvedValueOnce({
         [lessonRestrictionView]: [],
+      });
+      mocks.owaClientRequestMock.mockResolvedValueOnce({
+        [lessonView]: [
+          { lessonSlug: 'variables-and-data-types', subjectSlug: 'computing' },
+        ],
       });
       mocks.owaClientRequestMock.mockResolvedValueOnce({
         [downloadView]: [
@@ -276,6 +288,12 @@ describe('programme assets and questions endpoints', () => {
       ],
     });
     mocks.owaClientRequestMock.mockResolvedValueOnce({
+      [lessonView]: [
+        { lessonSlug: 'noun-phrases', subjectSlug: 'english' },
+        { lessonSlug: 'restricted-lesson', subjectSlug: 'english' },
+      ],
+    });
+    mocks.owaClientRequestMock.mockResolvedValueOnce({
       [downloadView]: [
         {
           lessonSlug: 'noun-phrases',
@@ -324,8 +342,8 @@ describe('programme assets and questions endpoints', () => {
       '/api/v0/lessons/noun-phrases/assets/worksheet',
     );
 
-    expect(mocks.owaClientRequestMock).toHaveBeenCalledTimes(4);
-    expect(mocks.owaClientRequestMock.mock.calls[2]?.[1]).toEqual({
+    expect(mocks.owaClientRequestMock).toHaveBeenCalledTimes(5);
+    expect(mocks.owaClientRequestMock.mock.calls[3]?.[1]).toEqual({
       lessonSlugs: ['noun-phrases'],
     });
   });
@@ -349,6 +367,9 @@ describe('programme assets and questions endpoints', () => {
     });
     mocks.owaClientRequestMock.mockResolvedValueOnce({
       [lessonRestrictionView]: [],
+    });
+    mocks.owaClientRequestMock.mockResolvedValueOnce({
+      [lessonView]: [{ lessonSlug: 'lesson-2', subjectSlug: 'english' }],
     });
     mocks.owaClientRequestMock.mockResolvedValueOnce({
       [downloadView]: [
@@ -385,11 +406,11 @@ describe('programme assets and questions endpoints', () => {
     expect(result.map((lesson) => lesson.lessonSlug)).toStrictEqual([
       'lesson-2',
     ]);
-    expect(mocks.owaClientRequestMock).toHaveBeenCalledTimes(4);
+    expect(mocks.owaClientRequestMock).toHaveBeenCalledTimes(5);
     expect(mocks.owaClientRequestMock.mock.calls[1]?.[1]).toEqual({
       slugs: ['lesson-2'],
     });
-    expect(mocks.owaClientRequestMock.mock.calls[2]?.[1]).toEqual({
+    expect(mocks.owaClientRequestMock.mock.calls[3]?.[1]).toEqual({
       lessonSlugs: ['lesson-2'],
     });
   });

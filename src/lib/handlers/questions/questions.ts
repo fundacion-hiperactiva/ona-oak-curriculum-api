@@ -61,7 +61,7 @@ Not for: quiz questions across a sequence (GET /sequences/{sequence}/questions);
 
       const client = getClient();
 
-      const gateTest = await isLessonRestricted(client, slug);
+      const gateTest = await isLessonRestricted(client, slug, 'quiz');
 
       if (gateTest.isBlocked()) {
         throw new TRPCError({
@@ -164,7 +164,11 @@ Not for: questions in a single programme (GET /programmes/{programme}/questions)
         ),
       );
 
-      const restrictions = await getLessonsRestrictions(client, lessonSlugs);
+      const restrictions = await getLessonsRestrictions(
+        client,
+        lessonSlugs,
+        'quiz',
+      );
       const lessonsAllowed = lessonSlugs.filter((slug) => !restrictions[slug]);
 
       const questionQuery = gql`
@@ -321,6 +325,7 @@ Not for: a single lesson's quiz (GET /lessons/{lesson}/quiz); questions across a
         data
           .map((lesson) => lesson.lessonSlug)
           .filter((lessonSlug): lessonSlug is string => Boolean(lessonSlug)),
+        'quiz',
       );
 
       for (const {
@@ -426,6 +431,7 @@ Not for: questions in a single lesson (GET /lessons/{lesson}/quiz); questions ac
       const restrictions = await getLessonsRestrictions(
         client,
         uniqueLessonSlugs,
+        'quiz',
       );
       const lessonSlugs = uniqueLessonSlugs.filter(
         (slug) => !restrictions[slug],

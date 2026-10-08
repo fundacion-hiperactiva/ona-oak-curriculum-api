@@ -57,9 +57,14 @@ interface AssetsForLesson {
 
 export async function assetsForLesson(
   lessonSlug: string,
+  assetType?: DownloadTypeEnum,
 ): Promise<AssetsForLesson> {
   const graphqlClient = getClient();
-  const gateTest = await isLessonRestricted(graphqlClient, lessonSlug);
+  const gateTest = await isLessonRestricted(
+    graphqlClient,
+    lessonSlug,
+    assetType,
+  );
 
   if (gateTest.isBlocked()) {
     throw new TRPCError({
