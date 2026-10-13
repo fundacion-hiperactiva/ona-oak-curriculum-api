@@ -57,9 +57,14 @@ interface AssetsForLesson {
 
 export async function assetsForLesson(
   lessonSlug: string,
+  assetType?: DownloadTypeEnum,
 ): Promise<AssetsForLesson> {
   const graphqlClient = getClient();
-  const gateTest = await isLessonRestricted(graphqlClient, lessonSlug);
+  const gateTest = await isLessonRestricted(
+    graphqlClient,
+    lessonSlug,
+    assetType,
+  );
 
   if (gateTest.isBlocked()) {
     throw new TRPCError({
@@ -301,7 +306,11 @@ Not for: assets in a single programme (GET /programmes/{programme}/assets); a si
         ),
       );
 
-      const restrictions = await getLessonsRestrictions(client, lessonSlugs);
+      const restrictions = await getLessonsRestrictions(
+        client,
+        lessonSlugs,
+        type,
+      );
       const lessonsAllowed = lessonSlugs.filter((slug) => !restrictions[slug]);
 
       const downloadsQuery = gql`
@@ -670,7 +679,11 @@ Not for: assets across a whole sequence (GET /sequences/{sequence}/assets); asse
       }
 
       // Step 2: fetch downloads
-      const restrictions = await getLessonsRestrictions(client, lessonSlugs);
+      const restrictions = await getLessonsRestrictions(
+        client,
+        lessonSlugs,
+        typeFilter,
+      );
       const lessonsAllowed = lessonSlugs.filter((slug) => !restrictions[slug]);
 
       if (lessonsAllowed.length === 0) {

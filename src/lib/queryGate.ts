@@ -7,6 +7,11 @@ import {
 } from './owaClient';
 import { subjectSlugs } from './keyStageAndSubjects';
 import { childSubjects } from './oakConsts';
+import {
+  type GatedAssetType,
+  getAssetRestrictionsForLesson,
+  getAssetRestrictionsForLessons,
+} from './queryGateData/assetTypeRestrictions';
 
 const commonError =
   'Learn more about Oak errors: https://open-api.thenational.academy/docs/about-oaks-api/errors';
@@ -82,10 +87,20 @@ export function isSubjectAllowed(subject: string): boolean {
   return allowed.includes(subject);
 }
 
-export async function getLessonsRestrictions(
+/**
+ * The restriction status of each of the given lessons, from the lesson's own
+ * restriction levels and the layer over them. The single source of truth for
+ * the gate's bulk answer: the asset endpoints read it as a boolean through
+ * `getLessonsRestrictions`, and the check-restricted endpoints return it.
+ *
+ * Lessons with no published row in the restriction view are left out, unless
+ * the layer restricts them.
+ */
+export async function getLessonsRestrictionStatuses(
   client: GraphQLClient,
   lessonSlugs: string[],
-): Promise<Record<string, boolean>> {
+  assetType?: GatedAssetType,
+): Promise<Record<string, CollapsedRestrictionStatus>> {
   const query = gql`
   query ($slugs: [String!]!) @cached(ttl: 300) {
     ${lessonRestrictionView}(
@@ -100,14 +115,21 @@ export async function getLessonsRestrictions(
   }
   `;
 
-  const res: LessonRestrictionView = await client.request(query, {
+  const restrictions: LessonRestrictionView = await client.request(query, {
     slugs: lessonSlugs,
   });
 
-  const result: Record<string, boolean> = {};
+  // TEMP-TPC-GATE: `assetType || 'video'` — see queryGateData/assetTypeRestrictions.ts
+  const layerRestrictions = await getAssetRestrictionsForLessons(
+    client,
+    lessonSlugs,
+    assetType || 'video',
+  );
 
-  for (const lesson of res[lessonRestrictionView]) {
-    result[lesson.slug] = isRestricted(
+  const result: Record<string, CollapsedRestrictionStatus> = {};
+
+  for (const lesson of restrictions[lessonRestrictionView]) {
+    result[lesson.slug] = collapsedRestrictionStatus(
       highestRestrictionLevel([
         lesson.tpc_downloadablefiles_max_restriction,
         lesson.tpc_media_max_restriction,
@@ -117,12 +139,40 @@ export async function getLessonsRestrictions(
     );
   }
 
+  // the layer only ever restricts further, and it stands on its own: a lesson
+  // it restricts stays restricted even with no row in the restriction view
+  for (const [slug, status] of layerRestrictions) {
+    if (status === 'restricted') {
+      result[slug] = status;
+    }
+  }
+
   return result;
+}
+
+export async function getLessonsRestrictions(
+  client: GraphQLClient,
+  lessonSlugs: string[],
+  assetType?: GatedAssetType,
+): Promise<Record<string, boolean>> {
+  const statuses = await getLessonsRestrictionStatuses(
+    client,
+    lessonSlugs,
+    assetType,
+  );
+
+  return Object.fromEntries(
+    Object.entries(statuses).map(([slug, status]) => [
+      slug,
+      status === 'restricted',
+    ]),
+  );
 }
 
 export async function isLessonRestricted(
   client: GraphQLClient,
   lessonSlug: string,
+  assetType?: GatedAssetType,
 ): Promise<GateWithReason> {
   const query = gql`
   query ($slug: String!) {
@@ -136,6 +186,17 @@ export async function isLessonRestricted(
     }
   }
   `;
+
+  if (
+    (await getAssetRestrictionsForLesson(
+      client,
+      lessonSlug,
+      assetType || 'video',
+    )) === 'restricted'
+  ) {
+    // This error is apparently intentionally vague. See git blame for info
+    return new GateWithReason(true, 'This is not currently available.');
+  }
 
   const res: LessonRestrictionView = await client.request(query, {
     slug: lessonSlug,

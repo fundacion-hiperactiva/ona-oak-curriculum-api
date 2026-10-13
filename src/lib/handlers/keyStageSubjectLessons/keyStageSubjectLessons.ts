@@ -1,30 +1,16 @@
 import { v0Procedure } from '@/lib/protect';
 import { router } from '@/lib/trpc';
 import { errorResponses } from '@/lib/errorResponses';
-import type {
-  LessonRestrictionView,
-  UnitVariantLessonsView,
-} from 'lib/owaClient';
-import {
-  getClient,
-  gql,
-  lessonRestrictionView,
-  unitVariantLessonsView,
-} from 'lib/owaClient';
+import type { UnitVariantLessonsView } from 'lib/owaClient';
+import { getClient, gql, unitVariantLessonsView } from 'lib/owaClient';
 
 import {
   keyStageSubjectLessonsRequestSchema,
   keyStageSubjectLessonsResponseSchema,
 } from './schemas';
 import { nextPageLink } from '@/lib/pagination';
-import {
-  collapsedRestrictionStatus,
-  highestRestrictionLevel,
-} from '@/lib/queryGate';
-import {
-  checkRestrictedLessonsResponseSchema,
-  RestrictionOutput,
-} from '../lesson/lesson';
+import { getLessonsRestrictionStatuses } from '@/lib/queryGate';
+import { checkRestrictedLessonsResponseSchema } from '../lesson/lesson';
 
 export const getKeyStageSubjectLessons = router({
   getKeyStageSubjectLessons: v0Procedure
@@ -264,43 +250,8 @@ Example: keyStage=ks3, subject=maths, unit=perimeter-and-area.`,
 
       const lessonSlugs = lessons.map((lesson) => lesson.lesson_slug);
 
-      const tpcQuery = gql`
-        query ($slugs: [String!]!) {
-          ${lessonRestrictionView}(
-            where: { slug: { _in: $slugs }, _state: { _eq: "published" } }
-          ) {
-            slug
-            tpc_downloadablefiles_max_restriction
-            tpc_media_max_restriction
-            tpc_quizimages_max_restriction
-            tpc_works_max_restriction
-          }
-        }
-      `;
-
-      const resRestrictions: LessonRestrictionView = await client.request(
-        tpcQuery,
-        {
-          slugs: lessonSlugs,
-        },
-      );
-
-      const results = resRestrictions[lessonRestrictionView].reduce(
-        (acc, curr) => {
-          acc[curr.slug] = collapsedRestrictionStatus(
-            highestRestrictionLevel([
-              curr.tpc_downloadablefiles_max_restriction,
-              curr.tpc_media_max_restriction,
-              curr.tpc_quizimages_max_restriction,
-              curr.tpc_works_max_restriction,
-            ]),
-          );
-
-          return acc;
-        },
-        {} as Record<string, RestrictionOutput>,
-      );
-
-      return results;
+      // no asset type: this answers for the lesson as a whole rather than for
+      // one of its assets, so it takes the gate's default reading
+      return getLessonsRestrictionStatuses(client, lessonSlugs);
     }),
 });

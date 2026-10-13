@@ -29,7 +29,11 @@ import {
   getVideoFromMux,
   listFilesWithMimeType,
 } from '@/lib/handlers/assets/helpers';
-import { typeToMime, type DownloadTypeEnum } from '@/lib/handlers/assets/types';
+import {
+  downloadTypeEnum,
+  typeToMime,
+  type DownloadTypeEnum,
+} from '@/lib/handlers/assets/types';
 import type { SignedAsset, Video } from '@/lib/owaClient';
 import { protect } from '@/lib/protect';
 import { assetBaseVideoUrl } from '@/lib/baseUrl';
@@ -111,7 +115,12 @@ const handler = async (
     const { lesson } = resolvedParams;
     args = { lesson, type };
 
-    const { assets } = await assetsForLesson(lesson);
+    // an unrecognised type leaves the gate checking every asset type, which is
+    // the safe side of the fence — the asset lookup below fails regardless
+    const { assets } = await assetsForLesson(
+      lesson,
+      downloadTypeEnum.safeParse(type).data,
+    );
 
     const usePPTX = type === 'slideDeck';
     if (usePPTX) {

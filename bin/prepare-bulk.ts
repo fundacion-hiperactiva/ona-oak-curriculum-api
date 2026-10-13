@@ -102,6 +102,7 @@ async function buildLessonData(
     const restrictions = await getLessonsRestrictions(
       client,
       lessonData.map((l) => l.lessonSlug),
+      'transcript',
     );
 
     if (!processAssets) {

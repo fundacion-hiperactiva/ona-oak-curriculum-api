@@ -29,7 +29,7 @@ Not for: searching across transcripts (GET /search/transcripts); the video file 
 
       const client = getClient();
 
-      const gated = await isLessonRestricted(client, slug);
+      const gated = await isLessonRestricted(client, slug, 'transcript');
 
       if (gated.isBlocked()) {
         throw new TRPCError({
