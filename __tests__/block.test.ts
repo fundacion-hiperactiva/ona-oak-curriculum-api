@@ -263,7 +263,7 @@ test('getLessonsRestrictions queries subjects for every asset type', async () =>
 // TEMP-TPC-GATE: delete these two along with
 // `assetTypeRestrictionsByLesson.json`. They read the first slug off the list
 // rather than naming one, so they keep testing the list as it shrinks.
-test.only('isLessonRestricted blocks a lesson on the hard-coded list whatever its subject', async () => {
+test('isLessonRestricted blocks a lesson on the hard-coded list whatever its subject', async () => {
   const [slug] = manualRestrictedLessonSlugs;
   const { client, request } = countedClient(subjectResponses(slug, 'maths'));
 
