@@ -199,7 +199,7 @@ test('isLessonRestricted queries the subject for every asset type', async () => 
   const result = await isLessonRestricted(client, 'art-lesson', 'quiz');
 
   expect(result.isBlocked()).toBe(true);
-  expect(request).toHaveBeenCalledTimes(2);
+  expect(request).toHaveBeenCalledTimes(1);
 });
 
 test('getLessonsRestrictions applies the subject-level restrictions too', async () => {
