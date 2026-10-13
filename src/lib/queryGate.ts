@@ -187,14 +187,6 @@ export async function isLessonRestricted(
   }
   `;
 
-  const res: LessonRestrictionView = await client.request(query, {
-    slug: lessonSlug,
-  });
-
-  if (!res[lessonRestrictionView].length) {
-    return new GateWithReason(false, 'Lesson not in restrictions');
-  }
-
   if (
     (await getAssetRestrictionsForLesson(
       client,
@@ -204,6 +196,14 @@ export async function isLessonRestricted(
   ) {
     // This error is apparently intentionally vague. See git blame for info
     return new GateWithReason(true, 'This is not currently available.');
+  }
+
+  const res: LessonRestrictionView = await client.request(query, {
+    slug: lessonSlug,
+  });
+
+  if (!res[lessonRestrictionView].length) {
+    return new GateWithReason(false, 'Lesson not in restrictions');
   }
 
   const restriction = res[lessonRestrictionView][0];
